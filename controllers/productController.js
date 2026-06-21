@@ -43,6 +43,22 @@ export const createProduct = async (req, res, next) => {
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
       return next(new ErrorResponse('Invalid product payload', 400));
     }
+
+    if (req.body.attributes && typeof req.body.attributes === 'string') {
+      try {
+        const parsedAttributes = JSON.parse(req.body.attributes);
+        
+        // Transform the object { model: "TX-100", colour: "Silver" } 
+        // into the schema layout [{ key: "model", value: "TX-100" }, { key: "colour", value: "Silver" }]
+        req.body.specifications = Object.entries(parsedAttributes).map(([key, value]) => ({
+          key: key.replace(/([A-Z])/g, ' $1').trim(), // Converts camelCase keys back into descriptive spaced words
+          value: String(value)
+        }));
+      } catch (e) {
+        return next(new ErrorResponse('Malformed technical attributes metadata structure', 400));
+      }
+    }
+
     const product = await productService.createProduct(req.body, req.files ?? []);
     return res.status(201).json({ success: true, product });
   } catch (err) {
@@ -56,6 +72,19 @@ export const updateProduct = async (req, res, next) => {
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
       return next(new ErrorResponse('Invalid product payload', 400));
     }
+
+    if (req.body.attributes && typeof req.body.attributes === 'string') {
+      try {
+        const parsedAttributes = JSON.parse(req.body.attributes);
+        req.body.specifications = Object.entries(parsedAttributes).map(([key, value]) => ({
+          key: key.replace(/([A-Z])/g, ' $1').trim(),
+          value: String(value)
+        }));
+      } catch (e) {
+        return next(new ErrorResponse('Malformed technical attributes metadata structure', 400));
+      }
+    }
+
     const product = await productService.updateProduct(req.params.id, req.body, req.files ?? []);
     if (!product) return next(new ErrorResponse('Product not found', 404));
     return res.json({ success: true, product });
