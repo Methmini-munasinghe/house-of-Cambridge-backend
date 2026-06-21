@@ -3,7 +3,7 @@ import User from '../model/User.js';
 import ErrorResponse from '../utils/errorResponse.js';
 import sendEmail from '../utils/sendEmail.js';
 import * as userRepo from '../repositories/userRepository.js';
-import admin from 'firebase-admin';
+import { auth } from '../config/firebaseAdmin.js';
 
 const EMAIL_RE        = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TOKEN_RE        = /^[a-f0-9]{40,64}$/i;
@@ -151,10 +151,9 @@ export const googleAuth = async (idToken) => {
     throw new ErrorResponse('ID token is required', 400);
   }
 
-  
   let decoded;
   try {
-    decoded = await admin.auth().verifyIdToken(idToken);
+    decoded = await auth.verifyIdToken(idToken);
   } catch {
     throw new ErrorResponse('Invalid or expired Google token', 401);
   }
@@ -185,7 +184,6 @@ export const googleAuth = async (idToken) => {
     avatar:     { public_id: '', url: sanitisePictureUrl(picture) },
   });
 };
-
 
 export const facebookAuth = async (accessToken) => {
   if (!accessToken || typeof accessToken !== 'string') {
