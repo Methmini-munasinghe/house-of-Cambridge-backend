@@ -18,7 +18,7 @@ const invoiceSchema = new mongoose.Schema(
     items: [
       {
         product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
-        name: { type: String, required: true }, // Backup name in case product is deleted
+        name: { type: String, required: true }, 
         quantity: { type: Number, required: true, min: 1 },
         unitPrice: { type: Number, required: true, min: 0 },
         total: { type: Number, required: true }
@@ -29,7 +29,15 @@ const invoiceSchema = new mongoose.Schema(
     taxPercent: { type: Number, default: 0, min: 0, max: 100 },
     taxAmount: { type: Number, default: 0, min: 0 },
     totalAmountDue: { type: Number, required: true, min: 0 },
-    issuedBy: { type: String, default: '' }
+    issuedBy: { type: String, default: '' },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    }
   },
   { timestamps: true }
 );

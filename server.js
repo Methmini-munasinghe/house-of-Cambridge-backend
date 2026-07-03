@@ -101,7 +101,7 @@ app.use('/api/admin',    adminRoutes);
 app.use('/api/upload',   uploadRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/brands',   brandRoutes);
-app.use('/api/invoices', invoiceRoutes);
+app.use('/api/admin/invoices', invoiceRoutes);
 
 app.use(errorHandler);
 

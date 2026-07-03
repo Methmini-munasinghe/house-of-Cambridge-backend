@@ -6,10 +6,9 @@ import { validate } from '../middleware/validate.js';
 
 const router = Router();
 
-// Protect all cascading invoice endpoints under the administrator authentication guard
+
 router.use(protect, authorize('admin', 'superadmin'));
 
-// Route for fetching all invoices and creating a new invoice record
 router.route('/')
   .get(ctrl.getInvoices)
   .post(
@@ -21,6 +20,17 @@ router.route('/')
     body('items.*.quantity').isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
     validate,
     ctrl.createInvoice
+  );
+  router.route('/:id')
+  .put(
+    param('id').isMongoId().withMessage('Invalid Invoice ID format'),
+    validate,
+    ctrl.updateInvoice 
+  )
+  .delete(
+    param('id').isMongoId().withMessage('Invalid Invoice ID format'),
+    validate,
+    ctrl.deleteInvoice
   );
 
 export default router;
