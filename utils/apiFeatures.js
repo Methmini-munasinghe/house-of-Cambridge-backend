@@ -11,12 +11,20 @@ export default class ApiFeatures {
     this.queryStr = queryStr;
   }
 
-  search() {
-    if (this.queryStr.keyword) {
-      this.query = this.query.find({ $text: { $search: this.queryStr.keyword } });
-    }
-    return this;
+search() {
+  if (this.queryStr.keyword) {
+    const escaped = this.queryStr.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'i');
+    this.query = this.query.find({
+      $or: [
+        { name: regex },
+        { description: regex },
+        { brand: regex },
+      ],
+    });
   }
+  return this;
+}
 
   filter() {
     if (this.queryStr.category) {
