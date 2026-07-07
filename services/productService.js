@@ -28,6 +28,8 @@ const ACTIVE_ORDER_STATUSES = Object.freeze([
 const ALLOWED_LIST_LIMITS  = Object.freeze([8, 12, 16, 20, 24, 48, 96]);
 const DEFAULT_LIST_LIMIT   = 12;
 const LOYALTY_POINTS_REVIEW = 20;
+const PRODUCT_CODE_PREFIX   = 'HOC-';
+const PRODUCT_CODE_LENGTH   = 4;
 
 const generateSlug = (name) =>
   name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -72,6 +74,15 @@ const resolveSlug = async (base, excludeId = null) => {
     : { slug: base };
   const collision = await Product.findOne(filter).select('_id').lean();
   return collision ? `${base}-${Date.now()}` : base;
+};
+
+export const generateProductCode = async () => {
+  const latestProduct = await Product.findOne().sort({ createdAt: -1 }).select('productCode').lean();
+  const lastCode = latestProduct?.productCode;
+  const match = typeof lastCode === 'string' ? lastCode.match(/^HOC-(\d+)$/i) : null;
+  const nextNumber = match ? Number(match[1]) + 1 : 1;
+
+  return `${PRODUCT_CODE_PREFIX}${String(nextNumber).padStart(PRODUCT_CODE_LENGTH, '0')}`;
 };
 
 export const getProducts = async (queryStr) => {
@@ -127,6 +138,10 @@ export const getProductById = async (id) => {
 };
 
 export const createProduct = async (data, files = []) => {
+  if (!data.productCode) {
+    data.productCode = await generateProductCode();
+  }
+
   coerceBooleans(data);
   coerceNumbers(data);
 
