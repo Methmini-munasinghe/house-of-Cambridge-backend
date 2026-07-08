@@ -471,6 +471,10 @@ export const getAdminProducts = async (req, res, next) => {
 
 export const createProduct = async (req, res, next) => {
   try {
+    if (!req.body.productCode) {
+      req.body.productCode = await productService.generateProductCode();
+    }
+
     const product = await productService.createProduct(req.body, req.files ?? []);
     return res.status(201).json({ success: true, product });
   } catch (err) { return next(err); }

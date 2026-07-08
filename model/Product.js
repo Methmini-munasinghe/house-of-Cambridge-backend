@@ -4,9 +4,11 @@ const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 300 },
     slug: { type: String, required: true, unique: true, lowercase: true },
+    productCode: { type: String, unique: true, sparse: true },
     description: { type: String, required: true },
     shortDescription: { type: String, default: '', maxlength: 500 },
     price: { type: Number, required: true, min: 0 },
+    comparePrice: { type: Number, default: 0, min: 0 },
     discountPrice: { type: Number, default: 0, min: 0 },
     discountPercent: { type: Number, default: 0, min: 0, max: 100 },
     stock: { type: Number, required: true, default: 0, min: 0 },

@@ -44,6 +44,10 @@ export const createProduct = async (req, res, next) => {
       return next(new ErrorResponse('Invalid product payload', 400));
     }
 
+    if (!req.body.productCode) {
+      req.body.productCode = await productService.generateProductCode();
+    }
+
     if (req.body.attributes && typeof req.body.attributes === 'string') {
       try {
         const parsedAttributes = JSON.parse(req.body.attributes);
