@@ -77,7 +77,7 @@ const resolveSlug = async (base, excludeId = null) => {
 };
 
 export const generateProductCode = async () => {
-  const latestProduct = await Product.findOne().sort({ createdAt: -1 }).select('productCode').lean();
+  const latestProduct = await Product.findOne().sort({ _id: -1 }).select('productCode').lean(); 
   const lastCode = latestProduct?.productCode;
   const match = typeof lastCode === 'string' ? lastCode.match(/^HOC-(\d+)$/i) : null;
   const nextNumber = match ? Number(match[1]) + 1 : 1;
@@ -158,7 +158,11 @@ export const createProduct = async (data, files = []) => {
 
   data.images = files.length ? await uploadImages(files, 'products') : [];
 
-  return productRepo.create(data);
+  const product = await productRepo.create(data);
+  return product.populate([
+    { path: 'category', select: 'name slug' },
+    { path: 'brand', select: 'name' }
+  ]);
 };
 
 export const updateProduct = async (id, data, files = []) => {
@@ -183,7 +187,13 @@ export const updateProduct = async (id, data, files = []) => {
     data.slug = await resolveSlug(data.slug, id);
   }
 
-  return productRepo.update(id, data);
+  const updatedProduct = await productRepo.update(id, data);
+  if (!updatedProduct) throw new ErrorResponse('Product not found', 404);
+
+  return updatedProduct.populate([
+    { path: 'category', select: 'name slug' },
+    { path: 'brand', select: 'name' }
+  ]);
 };
 
 export const deleteProduct = async (id) => {
