@@ -461,7 +461,7 @@ export const getAdminProducts = async (req, res, next) => {
     if (isActive !== undefined) query.isActive = isActive === 'true';
 
     const [products, total] = await Promise.all([
-      Product.find(query).populate('category', 'name').sort('-createdAt').skip(skip).limit(limit).lean(),
+      Product.find(query).populate('category', 'name').populate('brand', 'name').sort('-createdAt').skip(skip).limit(limit).lean(),
       Product.countDocuments(query),
     ]);
 
@@ -475,16 +475,33 @@ export const createProduct = async (req, res, next) => {
       req.body.productCode = await productService.generateProductCode();
     }
 
-    const product = await productService.createProduct(req.body, req.files ?? []);
-    return res.status(201).json({ success: true, product });
+    // 1. Run your core creation service logic
+    const rawProduct = await productService.createProduct(req.body, req.files ?? []);
+
+    // 2. Fetch it back with fresh populates so the frontend gets the object structure
+    const populatedProduct = await Product.findById(rawProduct._id)
+      .populate('category', 'name slug')
+      .populate('brand', 'name')
+      .lean();
+
+    return res.status(201).json({ success: true, product: populatedProduct });
   } catch (err) { return next(err); }
 };
 
 export const updateProduct = async (req, res, next) => {
   try {
     validateObjectId(req.params.id, 'product ID');
-    const product = await productService.updateProduct(req.params.id, req.body, req.files ?? []);
-    return res.json({ success: true, product });
+    
+    await productService.updateProduct(req.params.id, req.body, req.files ?? []);
+
+    const populatedProduct = await Product.findById(req.params.id)
+      .populate('category', 'name slug')
+      .populate('brand', 'name')
+      .lean();
+
+    if (!populatedProduct) return next(new ErrorResponse('Product not found', 404));
+
+    return res.json({ success: true, product: populatedProduct });
   } catch (err) { return next(err); }
 };
 
@@ -514,7 +531,7 @@ export const updateFlashSale = async (req, res, next) => {
     const product = await Product.findByIdAndUpdate(req.params.id, update, {
       returnDocument: 'after',
       runValidators:  true,
-    }).populate('category', 'name');
+    }).populate('category', 'name').populate('brand', 'name');
     if (!product) return next(new ErrorResponse('Product not found', 404));
 
     return res.json({ success: true, product });

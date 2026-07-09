@@ -13,7 +13,7 @@ const productSchema = new mongoose.Schema(
     discountPercent: { type: Number, default: 0, min: 0, max: 100 },
     stock: { type: Number, required: true, default: 0, min: 0 },
     sku: { type: String, unique: true, sparse: true, maxlength: 100 },
-    brand: { type: String, default: '', maxlength: 100 },
+    brand: { type: mongoose.Schema.Types.ObjectId, ref: 'Brand', default: null },
     category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
     images: [
       {
@@ -45,4 +45,11 @@ productSchema.index({ ratings: -1 });
 productSchema.index({ isActive: 1, isFeatured: 1 });
 productSchema.index({ isActive: 1, isFlashSale: 1 });
 
-export default mongoose.model('Product', productSchema);
+const Product = mongoose.model('Product', productSchema);
+
+Product.updateMany(
+  { brand: { $type: 'string' } },
+  { $set: { brand: null } }
+).catch(() => {});
+
+export default Product;
