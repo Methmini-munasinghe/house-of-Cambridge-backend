@@ -63,6 +63,14 @@ userSchema.methods.getJwtToken = function () {
   });
 };
 
+userSchema.methods.getRefreshToken = function () {
+  const refreshToken = jwt.sign({ id: this._id }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d',
+  });
+  this.refreshToken = refreshToken; 
+  return refreshToken;
+};
+
 userSchema.methods.getResetPasswordToken = function () {
   const resetToken = crypto.randomBytes(32).toString('hex');
   this.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
