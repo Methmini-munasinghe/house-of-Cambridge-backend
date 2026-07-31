@@ -52,11 +52,11 @@ export const createProduct = async (req, res, next) => {
       try {
         const parsedAttributes = JSON.parse(req.body.attributes);
         
-        // Transform the object { model: "TX-100", colour: "Silver" } 
-        // into the schema layout [{ key: "model", value: "TX-100" }, { key: "colour", value: "Silver" }]
-        req.body.specifications = Object.entries(parsedAttributes).map(([key, value]) => ({
-          key: key.replace(/([A-Z])/g, ' $1').trim(), // Converts camelCase keys back into descriptive spaced words
-          value: String(value)
+        req.body.specifications = Object.entries(parsedAttributes)
+          .filter(([_, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+          .map(([key, value]) => ({
+            key: key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase()).trim(),
+            value: String(value).trim(),
         }));
       } catch (e) {
         return next(new ErrorResponse('Malformed technical attributes metadata structure', 400));
@@ -80,9 +80,11 @@ export const updateProduct = async (req, res, next) => {
     if (req.body.attributes && typeof req.body.attributes === 'string') {
       try {
         const parsedAttributes = JSON.parse(req.body.attributes);
-        req.body.specifications = Object.entries(parsedAttributes).map(([key, value]) => ({
-          key: key.replace(/([A-Z])/g, ' $1').trim(),
-          value: String(value)
+        req.body.specifications = Object.entries(parsedAttributes)
+          .filter(([_, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+          .map(([key, value]) => ({
+            key: key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase()).trim(),
+            value: String(value).trim(),
         }));
       } catch (e) {
         return next(new ErrorResponse('Malformed technical attributes metadata structure', 400));
