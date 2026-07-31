@@ -475,6 +475,20 @@ export const createProduct = async (req, res, next) => {
       req.body.productCode = await productService.generateProductCode();
     }
 
+    if (req.body.attributes && typeof req.body.attributes === 'string') {
+      try {
+        const parsedAttributes = JSON.parse(req.body.attributes);
+        req.body.specifications = Object.entries(parsedAttributes)
+          .filter(([_, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+          .map(([key, value]) => ({
+            key: key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase()).trim(),
+            value: String(value).trim(),
+          }));
+      } catch (e) {
+        return next(new ErrorResponse('Malformed technical attributes metadata structure', 400));
+      }
+    }
+
     // 1. Run your core creation service logic
     const rawProduct = await productService.createProduct(req.body, req.files ?? []);
 
@@ -491,6 +505,20 @@ export const createProduct = async (req, res, next) => {
 export const updateProduct = async (req, res, next) => {
   try {
     validateObjectId(req.params.id, 'product ID');
+
+    if (req.body.attributes && typeof req.body.attributes === 'string') {
+      try {
+        const parsedAttributes = JSON.parse(req.body.attributes);
+        req.body.specifications = Object.entries(parsedAttributes)
+          .filter(([_, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+          .map(([key, value]) => ({
+            key: key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase()).trim(),
+            value: String(value).trim(),
+          }));
+      } catch (e) {
+        return next(new ErrorResponse('Malformed technical attributes metadata structure', 400));
+      }
+    }
     
     await productService.updateProduct(req.params.id, req.body, req.files ?? []);
 
