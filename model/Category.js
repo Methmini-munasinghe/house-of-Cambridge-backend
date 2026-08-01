@@ -17,6 +17,7 @@ const categorySchema = new mongoose.Schema(
     parent: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', default: null },
     isActive: { type: Boolean, default: true },
     order: { type: Number, default: 0 },
+    brand: { type: mongoose.Schema.Types.ObjectId, ref: 'Brand', default: null },
   },
   { timestamps: true },
 );

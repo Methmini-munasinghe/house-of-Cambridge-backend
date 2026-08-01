@@ -605,6 +605,7 @@ export const createCategory = async (req, res, next) => {
       const n = parseInt(req.body.order, 10);
       if (Number.isFinite(n)) data.order = n;
     }
+    if (req.body.brand && OBJECT_ID_RE.test(req.body.brand)) data.brand = req.body.brand;
     if (req.body.isActive !== undefined) data.isActive = req.body.isActive === true || req.body.isActive === 'true';
 
     if (req.file) {
@@ -629,6 +630,9 @@ export const updateCategory = async (req, res, next) => {
     if (req.body.order !== undefined) {
       const n = parseInt(req.body.order, 10);
       if (Number.isFinite(n)) data.order = n;
+    }
+    if (req.body.brand !== undefined) {
+      data.brand = (req.body.brand && OBJECT_ID_RE.test(req.body.brand)) ? req.body.brand : null;
     }
     if (req.body.isActive !== undefined) data.isActive = req.body.isActive === true || req.body.isActive === 'true';
     if (req.body.slug) {
