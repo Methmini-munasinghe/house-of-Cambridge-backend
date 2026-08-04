@@ -18,6 +18,12 @@ const categorySchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     order: { type: Number, default: 0 },
     brand: { type: mongoose.Schema.Types.ObjectId, ref: 'Brand', default: null },
+    specifications: [
+      {
+        key: { type: String, required: true, trim: true, maxlength: 100 },
+        value: { type: String, trim: true, maxlength: 300 },
+      },
+    ],
   },
   { timestamps: true },
 );

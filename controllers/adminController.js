@@ -608,6 +608,21 @@ export const createCategory = async (req, res, next) => {
     if (req.body.brand && OBJECT_ID_RE.test(req.body.brand)) data.brand = req.body.brand;
     if (req.body.isActive !== undefined) data.isActive = req.body.isActive === true || req.body.isActive === 'true';
 
+    if (req.body.specifications && typeof req.body.specifications === 'string') {
+      try {
+        const parsed = JSON.parse(req.body.specifications);
+        if (!Array.isArray(parsed)) throw new Error();
+        data.specifications = parsed
+          .filter((s) => s?.key?.trim())
+          .map((s) => ({
+            key:   String(s.key).trim().slice(0, 100),
+            value: String(s.value ?? '').trim().slice(0, 300),
+          }));
+      } catch (e) {
+        return next(new ErrorResponse('Malformed specifications data', 400));
+      }
+    }
+
     if (req.file) {
       const result = await uploadBuffer(req.file.buffer, 'categories');
       if (!result?.public_id || !result?.secure_url) return next(new ErrorResponse('Image upload failed', 502));
@@ -635,6 +650,21 @@ export const updateCategory = async (req, res, next) => {
       data.brand = (req.body.brand && OBJECT_ID_RE.test(req.body.brand)) ? req.body.brand : null;
     }
     if (req.body.isActive !== undefined) data.isActive = req.body.isActive === true || req.body.isActive === 'true';
+
+    if (req.body.specifications && typeof req.body.specifications === 'string') {
+      try {
+        const parsed = JSON.parse(req.body.specifications);
+        if (!Array.isArray(parsed)) throw new Error();
+        data.specifications = parsed
+          .filter((s) => s?.key?.trim())
+          .map((s) => ({
+            key:   String(s.key).trim().slice(0, 100),
+            value: String(s.value ?? '').trim().slice(0, 300),
+          }));
+      } catch (e) {
+        return next(new ErrorResponse('Malformed specifications data', 400));
+      }
+    }
     if (req.body.slug) {
       const s = req.body.slug.trim().toLowerCase();
       if (!SLUG_RE.test(s)) return next(new ErrorResponse('Invalid slug format', 400));
