@@ -414,15 +414,17 @@ export const updateOrderStatus = async (req, res, next) => {
       returnDocument: 'after' 
     }).populate('user', 'name email');
 
-    if (status === 'delivered' && order.user && !order.loyaltyPointsEarned) {
+    if (status === 'delivered' && order.user && !order.loyaltyPointsAwarded) {
+      const pointsToAward = order.loyaltyPointsEarned || Math.floor(order.total / 50) || 1;
       await awardLoyaltyPoints({
         userId: order.user._id,
         reason: 'order',
         refId: order._id,
         refModel: 'Order',
         desc: `Order #${order.orderNumber}`,
+        points: pointsToAward,
       });
-      order.loyaltyPointsEarned = 1;
+      order.loyaltyPointsAwarded = true;
       await order.save();
     }
 

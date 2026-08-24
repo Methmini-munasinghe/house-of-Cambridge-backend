@@ -2,8 +2,8 @@
 import User from '../model/User.js';
 import LoyaltyTransaction from '../model/LoyaltyTransaction.js';
 
-export async function awardLoyaltyPoints({ userId, reason, refId, refModel, desc }) {
-  const POINTS = 1; 
+export async function awardLoyaltyPoints({ userId, reason, refId, refModel, desc, points }) {
+  const POINTS = points !== undefined ? points : 1; 
   const EXPIRY_DAYS = 180;
 
   await User.findByIdAndUpdate(userId, {

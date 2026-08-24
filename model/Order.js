@@ -73,6 +73,7 @@ const orderSchema = new mongoose.Schema(
     coupon:              { type: String, default: '' },
     loyaltyPointsUsed:   { type: Number, default: 0, min: 0 },
     loyaltyPointsEarned: { type: Number, default: 0, min: 0 },
+    loyaltyPointsAwarded: { type: Boolean, default: false },
 
     trackingNumber: { type: String, default: '' },
     deliveredAt:    Date,

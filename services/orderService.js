@@ -1,6 +1,7 @@
 
 import User from '../model/User.js';
 import Product from '../model/Product.js';
+import LoyaltyTransaction from '../model/LoyaltyTransaction.js';
 import Notification from '../model/Notification.js';
 import ErrorResponse from '../utils/errorResponse.js';
 import sendEmail from '../utils/sendEmail.js';
@@ -11,7 +12,7 @@ import { ORDER_STATUSES, PAYMENT_STATUSES } from '../constants/order.js';
 import Order from '../model/Order.js';
 const OBJECT_ID_RE = /^[a-f\d]{24}$/i;
 
-const TAX_RATE = 0.08;
+const TAX_RATE = process.env.TAX_RATE !== undefined ? Number(process.env.TAX_RATE) : 0.08;
 const LOYALTY_EARN_RATE = 50;
 const MAX_LOYALTY_REDEEM_RATIO = 0.25;
 
@@ -66,10 +67,25 @@ export const createOrder = async (userId, sessionId, orderData) => {
   const subtotal = cart.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const discount = Number(cart.discount) || 0;
 
-  const loyaltyUsed = Math.min(
-    Number(orderData.loyaltyPointsUsed) || 0,
-    Math.floor(subtotal * MAX_LOYALTY_REDEEM_RATIO)
-  );
+  const loyaltyUsed = Number(orderData.loyaltyPointsUsed) || 0;
+  if (loyaltyUsed < 0) {
+    throw new ErrorResponse('Invalid loyalty points to redeem', 400);
+  }
+  if (loyaltyUsed > 0) {
+    if (!userId) {
+      throw new ErrorResponse('Guest checkout cannot redeem loyalty points', 400);
+    }
+    const user = await User.findById(userId).select('loyaltyPoints');
+    if (!user) {
+      throw new ErrorResponse('User not found', 404);
+    }
+    if (loyaltyUsed > user.loyaltyPoints) {
+      throw new ErrorResponse(`Cannot redeem more points than available: ${user.loyaltyPoints}`, 400);
+    }
+    if (loyaltyUsed > subtotal) {
+      throw new ErrorResponse('Loyalty discount cannot exceed order subtotal', 400);
+    }
+  }
 
   const taxable = Math.max(0, subtotal - discount - loyaltyUsed);
   const tax = Math.round(taxable * TAX_RATE);
@@ -99,6 +115,7 @@ export const createOrder = async (userId, sessionId, orderData) => {
     coupon: cart.coupon?.code || '',
     loyaltyPointsUsed: loyaltyUsed,
     loyaltyPointsEarned: loyaltyEarned,
+    loyaltyPointsAwarded: false,
     notes: (orderData.notes || orderData.orderNotes || '').trim().slice(0, 500),
   });
 
@@ -107,11 +124,22 @@ export const createOrder = async (userId, sessionId, orderData) => {
   ));
 
   if (userId) {
-    await User.findByIdAndUpdate(userId, { $inc: { loyaltyPoints: loyaltyEarned - loyaltyUsed } });
+    if (loyaltyUsed > 0) {
+      await User.findByIdAndUpdate(userId, { $inc: { loyaltyPoints: -loyaltyUsed } });
+      await LoyaltyTransaction.create({
+        user: userId,
+        type: 'redeemed',
+        reason: 'redemption',
+        points: loyaltyUsed,
+        refId: order._id,
+        refModel: 'Order',
+        desc: `Redeemed points on order #${order.orderNumber}`,
+      });
+    }
     await Notification.create({
       user: userId,
       title: 'Order Placed',
-      message: `Order #${order.orderNumber} placed. You earned ${loyaltyEarned} points!`,
+      message: `Order #${order.orderNumber} placed. You will earn ${loyaltyEarned} points when it is delivered!`,
       type: 'order',
       link: `/track-order/${order._id}`,
     });
