@@ -36,7 +36,7 @@ export const addToCart = async (req, res, next) => {
     const { userId, sessionId } = getIdentifiers(req);
     if (!assertIdentity(userId, sessionId, next)) return;
 
-    const { productId, quantity = 1 } = req.body;
+    const { productId, quantity = 1, selectedVariant = null } = req.body;
 
     if (!productId || !OBJECT_ID_RE.test(productId)) {
       return next(new ErrorResponse('Invalid product ID', 400));
@@ -47,7 +47,7 @@ export const addToCart = async (req, res, next) => {
       return next(new ErrorResponse('Quantity must be an integer between 1 and 100', 400));
     }
 
-    const cart = await cartService.addToCart(userId, sessionId, productId, qty);
+    const cart = await cartService.addToCart(userId, sessionId, productId, qty, selectedVariant);
     return res.status(201).json({ success: true, cart });
   } catch (err) {
     return next(err);
@@ -59,18 +59,18 @@ export const updateCartItem = async (req, res, next) => {
     const { userId, sessionId } = getIdentifiers(req);
     if (!assertIdentity(userId, sessionId, next)) return;
 
-    const { productId, quantity } = req.body;
+    const { productId, quantity, itemId = null, variantName = null } = req.body;
 
     if (!productId || !OBJECT_ID_RE.test(productId)) {
       return next(new ErrorResponse('Invalid product ID', 400));
     }
 
     const qty = Number(quantity);
-    if (!Number.isInteger(qty) || qty < 1 || qty > 100) {
-      return next(new ErrorResponse('Quantity must be an integer between 1 and 100', 400));
+    if (!Number.isInteger(qty) || qty < 0 || qty > 100) {
+      return next(new ErrorResponse('Quantity must be an integer between 0 and 100', 400));
     }
 
-    const cart = await cartService.updateCartItem(userId, sessionId, productId, qty);
+    const cart = await cartService.updateCartItem(userId, sessionId, productId, qty, itemId, variantName);
     return res.json({ success: true, cart });
   } catch (err) {
     return next(err);
@@ -83,11 +83,12 @@ export const removeFromCart = async (req, res, next) => {
     if (!assertIdentity(userId, sessionId, next)) return;
 
     const { productId } = req.params;
+    const { itemId, variantName } = req.query;
     if (!productId || !OBJECT_ID_RE.test(productId)) {
       return next(new ErrorResponse('Invalid product ID', 400));
     }
 
-    const cart = await cartService.removeFromCart(userId, sessionId, productId);
+    const cart = await cartService.removeFromCart(userId, sessionId, productId, itemId, variantName);
     return res.json({ success: true, cart });
   } catch (err) {
     return next(err);

@@ -100,9 +100,10 @@ export const createOrder = async (userId, sessionId, orderData) => {
     items: cart.items.map(i => ({
       product: i.product._id || i.product,
       name: i.product.name || '',
-      image: i.product.images?.[0]?.url || '',
+      image: i.selectedVariant?.image || i.product.images?.[0]?.url || '',
       price: i.price,
       quantity: i.quantity,
+      selectedVariant: i.selectedVariant || undefined,
     })),
     shippingAddress,
     paymentMethod,
@@ -119,9 +120,21 @@ export const createOrder = async (userId, sessionId, orderData) => {
     notes: (orderData.notes || orderData.orderNotes || '').trim().slice(0, 500),
   });
 
-  await Promise.allSettled(cart.items.map(item =>
-    Product.findByIdAndUpdate(item.product._id || item.product, { $inc: { stock: -item.quantity } })
-  ));
+  await Promise.allSettled(cart.items.map(async (item) => {
+    const prodId = item.product._id || item.product;
+    await Product.findByIdAndUpdate(prodId, { $inc: { stock: -item.quantity } });
+    if (item.selectedVariant?.sku) {
+      await Product.updateOne(
+        { _id: prodId, 'variants.sku': item.selectedVariant.sku },
+        { $inc: { 'variants.$.stock': -item.quantity } }
+      );
+    } else if (item.selectedVariant?.name) {
+      await Product.updateOne(
+        { _id: prodId, 'variants.name': item.selectedVariant.name },
+        { $inc: { 'variants.$.stock': -item.quantity } }
+      );
+    }
+  }));
 
   if (userId) {
     if (loyaltyUsed > 0) {

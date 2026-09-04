@@ -24,6 +24,12 @@ const categorySchema = new mongoose.Schema(
         value: { type: String, trim: true, maxlength: 300 },
       },
     ],
+    variantAttributes: [
+      {
+        name: { type: String, required: true, trim: true, maxlength: 100 },
+        options: [{ type: String, trim: true, maxlength: 100 }],
+      },
+    ],
   },
   { timestamps: true },
 );
