@@ -17,7 +17,7 @@ const invoiceSchema = new mongoose.Schema(
     },
     items: [
       {
-        product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+        product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', default: null },
         name: { type: String, required: true }, 
         quantity: { type: Number, required: true, min: 1 },
         unitPrice: { type: Number, required: true, min: 0 },

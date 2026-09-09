@@ -33,27 +33,51 @@ export const createInvoice = async (req, res, next) => {
     const processItems = [];
 
     for (const item of items) {
-      const product = await Product.findById(item.productId).session(session);
-      if (!product) throw new ErrorResponse(`Product not found for ID: ${item.productId}`, 44);
+      const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
 
-      if (invoiceType === 'manual') {
-        if (product.stock < item.quantity) {
-          throw new ErrorResponse(`Insufficient stock balance for item: ${product.name}. Available: ${product.stock}`, 400);
+      if (item.productId) {
+        const product = await Product.findById(item.productId).session(session);
+        if (!product) throw new ErrorResponse(`Product not found for ID: ${item.productId}`, 404);
+
+        if (invoiceType === 'manual') {
+          if (product.stock < qty) {
+            throw new ErrorResponse(`Insufficient stock balance for item: ${product.name}. Available: ${product.stock}`, 400);
+          }
+          product.stock -= qty;
+          await product.save({ session });
         }
-        product.stock -= item.quantity;
-        await product.save({ session });
+
+        const unitPrice = item.unitPrice !== undefined && item.unitPrice !== null && !isNaN(Number(item.unitPrice))
+          ? Number(item.unitPrice)
+          : product.price;
+        const itemTotal = unitPrice * qty;
+        derivedSubtotal += itemTotal;
+
+        processItems.push({
+          product: product._id,
+          name: item.name || product.name,
+          quantity: qty,
+          unitPrice,
+          total: itemTotal
+        });
+      } else {
+        // Custom non-catalog item — name is required
+        const customName = typeof item.name === 'string' ? item.name.trim() : '';
+        if (!customName) {
+          throw new ErrorResponse('Item name is required for custom line items', 400);
+        }
+        const unitPrice = Number(item.unitPrice) >= 0 ? Number(item.unitPrice) : 0;
+        const itemTotal = unitPrice * qty;
+        derivedSubtotal += itemTotal;
+
+        processItems.push({
+          product: null,
+          name: customName,
+          quantity: qty,
+          unitPrice,
+          total: itemTotal
+        });
       }
-
-      const itemTotal = product.price * item.quantity;
-      derivedSubtotal += itemTotal;
-
-      processItems.push({
-        product: product._id,
-        name: product.name,
-        quantity: item.quantity,
-        unitPrice: product.price,
-        total: itemTotal
-      });
     }
 
     const taxAmount = Math.round((derivedSubtotal - discount) * (taxPercent / 100));
@@ -89,7 +113,9 @@ export const createInvoice = async (req, res, next) => {
 // Get all invoices list 
 export const getInvoices = async (req, res, next) => {
   try {
-    const invoices = await Invoice.find({ isDeleted: { $ne: true } }).sort({ createdAt: -1 });
+    const invoices = await Invoice.find({ isDeleted: { $ne: true } })
+      .populate('items.product', 'name price stock productCode')
+      .sort({ createdAt: -1 });
     return res.status(200).json({ success: true, count: invoices.length, invoices });
   } catch (err) {
     return next(err);
@@ -144,21 +170,44 @@ export const updateInvoice = async (req, res, next) => {
       processItems = [];
 
       for (const item of items) {
-        const product = await Product.findById(item.productId).session(session);
-        if (!product) {
-          throw new ErrorResponse(`Product not found for ID: ${item.productId}`, 404);
+        const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+
+        if (item.productId) {
+          const product = await Product.findById(item.productId).session(session);
+          if (!product) {
+            throw new ErrorResponse(`Product not found for ID: ${item.productId}`, 404);
+          }
+
+          const unitPrice = item.unitPrice !== undefined && item.unitPrice !== null && !isNaN(Number(item.unitPrice))
+            ? Number(item.unitPrice)
+            : product.price;
+          const itemTotal = unitPrice * qty;
+          derivedSubtotal += itemTotal;
+
+          processItems.push({
+            product: product._id,
+            name: item.name || product.name,
+            quantity: qty,
+            unitPrice,
+            total: itemTotal
+          });
+        } else {
+          const customName = typeof item.name === 'string' ? item.name.trim() : '';
+          if (!customName) {
+            throw new ErrorResponse('Item name is required for custom line items', 400);
+          }
+          const unitPrice = Number(item.unitPrice) >= 0 ? Number(item.unitPrice) : 0;
+          const itemTotal = unitPrice * qty;
+          derivedSubtotal += itemTotal;
+
+          processItems.push({
+            product: null,
+            name: customName,
+            quantity: qty,
+            unitPrice,
+            total: itemTotal
+          });
         }
-
-        const itemTotal = product.price * item.quantity;
-        derivedSubtotal += itemTotal;
-
-        processItems.push({
-          product: product._id,
-          name: product.name,
-          quantity: item.quantity,
-          unitPrice: product.price,
-          total: itemTotal
-        });
       }
     }
 
