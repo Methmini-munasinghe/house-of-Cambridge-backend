@@ -34,6 +34,27 @@ const productSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     weight: { type: Number, default: 0, min: 0 },
     usageInstructions: [{ type: String, maxlength: 500 }],
+    variantAttributes: [
+      {
+        name: { type: String, trim: true, maxlength: 100 },
+        options: [{ type: String, trim: true, maxlength: 100 }],
+      },
+    ],
+    variants: [
+      {
+        sku: { type: String, trim: true, maxlength: 100 },
+        name: { type: String, trim: true, maxlength: 200 },
+        attributes: { type: mongoose.Schema.Types.Mixed, default: {} },
+        price: { type: Number, min: 0, default: 0 },
+        comparePrice: { type: Number, min: 0, default: 0 },
+        stock: { type: Number, min: 0, default: 0 },
+        image: {
+          public_id: { type: String, default: '' },
+          url: { type: String, default: '' },
+        },
+        isActive: { type: Boolean, default: true },
+      },
+    ],
   },
   { timestamps: true },
 );

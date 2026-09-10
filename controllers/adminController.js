@@ -414,15 +414,17 @@ export const updateOrderStatus = async (req, res, next) => {
       returnDocument: 'after' 
     }).populate('user', 'name email');
 
-    if (status === 'delivered' && order.user && !order.loyaltyPointsEarned) {
+    if (status === 'delivered' && order.user && !order.loyaltyPointsAwarded) {
+      const pointsToAward = order.loyaltyPointsEarned || Math.floor(order.total / 50) || 1;
       await awardLoyaltyPoints({
         userId: order.user._id,
         reason: 'order',
         refId: order._id,
         refModel: 'Order',
         desc: `Order #${order.orderNumber}`,
+        points: pointsToAward,
       });
-      order.loyaltyPointsEarned = 1;
+      order.loyaltyPointsAwarded = true;
       await order.save();
     }
 
@@ -489,12 +491,56 @@ export const createProduct = async (req, res, next) => {
       }
     }
 
+    if (req.body.variantAttributes) {
+      try {
+        const parsed = typeof req.body.variantAttributes === 'string'
+          ? JSON.parse(req.body.variantAttributes)
+          : req.body.variantAttributes;
+        if (Array.isArray(parsed)) {
+          req.body.variantAttributes = parsed
+            .filter((v) => v?.name?.trim())
+            .map((v) => ({
+              name: String(v.name).trim().slice(0, 100),
+              options: Array.isArray(v.options)
+                ? v.options.map((opt) => String(opt).trim()).filter(Boolean)
+                : typeof v.options === 'string'
+                  ? v.options.split(',').map((opt) => opt.trim()).filter(Boolean)
+                  : [],
+            }));
+        }
+      } catch (e) {
+        return next(new ErrorResponse('Malformed variant attributes data', 400));
+      }
+    }
+
+    if (req.body.variants) {
+      try {
+        const parsed = typeof req.body.variants === 'string'
+          ? JSON.parse(req.body.variants)
+          : req.body.variants;
+        if (Array.isArray(parsed)) {
+          req.body.variants = parsed.map((v) => ({
+            sku: String(v.sku || '').trim().slice(0, 100),
+            name: String(v.name || '').trim().slice(0, 200),
+            attributes: typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : {},
+            price: Number(v.price) >= 0 ? Number(v.price) : 0,
+            comparePrice: Number(v.comparePrice) >= 0 ? Number(v.comparePrice) : 0,
+            stock: Number(v.stock) >= 0 ? Math.floor(Number(v.stock)) : 0,
+            image: v.image || { public_id: '', url: '' },
+            isActive: v.isActive !== false && v.isActive !== 'false',
+          }));
+        }
+      } catch (e) {
+        return next(new ErrorResponse('Malformed variants data', 400));
+      }
+    }
+
     // 1. Run your core creation service logic
     const rawProduct = await productService.createProduct(req.body, req.files ?? []);
 
     // 2. Fetch it back with fresh populates so the frontend gets the object structure
     const populatedProduct = await Product.findById(rawProduct._id)
-      .populate('category', 'name slug')
+      .populate('category', 'name slug variantAttributes')
       .populate('brand', 'name')
       .lean();
 
@@ -519,11 +565,55 @@ export const updateProduct = async (req, res, next) => {
         return next(new ErrorResponse('Malformed technical attributes metadata structure', 400));
       }
     }
+
+    if (req.body.variantAttributes) {
+      try {
+        const parsed = typeof req.body.variantAttributes === 'string'
+          ? JSON.parse(req.body.variantAttributes)
+          : req.body.variantAttributes;
+        if (Array.isArray(parsed)) {
+          req.body.variantAttributes = parsed
+            .filter((v) => v?.name?.trim())
+            .map((v) => ({
+              name: String(v.name).trim().slice(0, 100),
+              options: Array.isArray(v.options)
+                ? v.options.map((opt) => String(opt).trim()).filter(Boolean)
+                : typeof v.options === 'string'
+                  ? v.options.split(',').map((opt) => opt.trim()).filter(Boolean)
+                  : [],
+            }));
+        }
+      } catch (e) {
+        return next(new ErrorResponse('Malformed variant attributes data', 400));
+      }
+    }
+
+    if (req.body.variants) {
+      try {
+        const parsed = typeof req.body.variants === 'string'
+          ? JSON.parse(req.body.variants)
+          : req.body.variants;
+        if (Array.isArray(parsed)) {
+          req.body.variants = parsed.map((v) => ({
+            sku: String(v.sku || '').trim().slice(0, 100),
+            name: String(v.name || '').trim().slice(0, 200),
+            attributes: typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : {},
+            price: Number(v.price) >= 0 ? Number(v.price) : 0,
+            comparePrice: Number(v.comparePrice) >= 0 ? Number(v.comparePrice) : 0,
+            stock: Number(v.stock) >= 0 ? Math.floor(Number(v.stock)) : 0,
+            image: v.image || { public_id: '', url: '' },
+            isActive: v.isActive !== false && v.isActive !== 'false',
+          }));
+        }
+      } catch (e) {
+        return next(new ErrorResponse('Malformed variants data', 400));
+      }
+    }
     
     await productService.updateProduct(req.params.id, req.body, req.files ?? []);
 
     const populatedProduct = await Product.findById(req.params.id)
-      .populate('category', 'name slug')
+      .populate('category', 'name slug variantAttributes')
       .populate('brand', 'name')
       .lean();
 
@@ -605,7 +695,45 @@ export const createCategory = async (req, res, next) => {
       const n = parseInt(req.body.order, 10);
       if (Number.isFinite(n)) data.order = n;
     }
+    if (req.body.brand && OBJECT_ID_RE.test(req.body.brand)) data.brand = req.body.brand;
     if (req.body.isActive !== undefined) data.isActive = req.body.isActive === true || req.body.isActive === 'true';
+
+    if (req.body.specifications && typeof req.body.specifications === 'string') {
+      try {
+        const parsed = JSON.parse(req.body.specifications);
+        if (!Array.isArray(parsed)) throw new Error();
+        data.specifications = parsed
+          .filter((s) => s?.key?.trim())
+          .map((s) => ({
+            key:   String(s.key).trim().slice(0, 100),
+            value: String(s.value ?? '').trim().slice(0, 300),
+          }));
+      } catch (e) {
+        return next(new ErrorResponse('Malformed specifications data', 400));
+      }
+    }
+
+    if (req.body.variantAttributes) {
+      try {
+        const parsed = typeof req.body.variantAttributes === 'string'
+          ? JSON.parse(req.body.variantAttributes)
+          : req.body.variantAttributes;
+        if (Array.isArray(parsed)) {
+          data.variantAttributes = parsed
+            .filter((v) => v?.name?.trim())
+            .map((v) => ({
+              name: String(v.name).trim().slice(0, 100),
+              options: Array.isArray(v.options)
+                ? v.options.map((opt) => String(opt).trim()).filter(Boolean)
+                : typeof v.options === 'string'
+                  ? v.options.split(',').map((opt) => opt.trim()).filter(Boolean)
+                  : [],
+            }));
+        }
+      } catch (e) {
+        return next(new ErrorResponse('Malformed variant attributes data', 400));
+      }
+    }
 
     if (req.file) {
       const result = await uploadBuffer(req.file.buffer, 'categories');
@@ -630,7 +758,47 @@ export const updateCategory = async (req, res, next) => {
       const n = parseInt(req.body.order, 10);
       if (Number.isFinite(n)) data.order = n;
     }
+    if (req.body.brand !== undefined) {
+      data.brand = (req.body.brand && OBJECT_ID_RE.test(req.body.brand)) ? req.body.brand : null;
+    }
     if (req.body.isActive !== undefined) data.isActive = req.body.isActive === true || req.body.isActive === 'true';
+
+    if (req.body.specifications && typeof req.body.specifications === 'string') {
+      try {
+        const parsed = JSON.parse(req.body.specifications);
+        if (!Array.isArray(parsed)) throw new Error();
+        data.specifications = parsed
+          .filter((s) => s?.key?.trim())
+          .map((s) => ({
+            key:   String(s.key).trim().slice(0, 100),
+            value: String(s.value ?? '').trim().slice(0, 300),
+          }));
+      } catch (e) {
+        return next(new ErrorResponse('Malformed specifications data', 400));
+      }
+    }
+
+    if (req.body.variantAttributes) {
+      try {
+        const parsed = typeof req.body.variantAttributes === 'string'
+          ? JSON.parse(req.body.variantAttributes)
+          : req.body.variantAttributes;
+        if (Array.isArray(parsed)) {
+          data.variantAttributes = parsed
+            .filter((v) => v?.name?.trim())
+            .map((v) => ({
+              name: String(v.name).trim().slice(0, 100),
+              options: Array.isArray(v.options)
+                ? v.options.map((opt) => String(opt).trim()).filter(Boolean)
+                : typeof v.options === 'string'
+                  ? v.options.split(',').map((opt) => opt.trim()).filter(Boolean)
+                  : [],
+            }));
+        }
+      } catch (e) {
+        return next(new ErrorResponse('Malformed variant attributes data', 400));
+      }
+    }
     if (req.body.slug) {
       const s = req.body.slug.trim().toLowerCase();
       if (!SLUG_RE.test(s)) return next(new ErrorResponse('Invalid slug format', 400));

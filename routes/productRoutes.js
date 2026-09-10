@@ -31,7 +31,7 @@ router.post(
   '/',
   protect,
   authorize('admin', 'superadmin'),
-  upload.array('images', 5),
+  upload.any(),
   ctrl.createProduct,
 );
 
@@ -41,7 +41,7 @@ router.put(
   authorize('admin', 'superadmin'),
   param('id').isMongoId(),
   validate,
-  upload.array('images', 5),
+  upload.any(),
   ctrl.updateProduct,
 );
 

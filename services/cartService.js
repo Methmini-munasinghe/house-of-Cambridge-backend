@@ -9,29 +9,102 @@ export const getCart = (userId, sessionId) => {
   return null;
 };
 
-export const addToCart = async (userId, sessionId, productId, quantity) => {
+export const addToCart = async (userId, sessionId, productId, quantity, selectedVariant = null) => {
   const qty = Math.max(1, Math.floor(Number(quantity)));
   const product = await Product.findById(productId);
   if (!product || !product.isActive) throw new ErrorResponse('Product not found', 404);
-  if (product.stock < qty) throw new ErrorResponse('Insufficient stock', 400);
+
+  let variantData = null;
+  let itemPrice = product.discountPrice > 0 ? product.discountPrice : product.price;
+  let maxStock = product.stock;
+
+  if (selectedVariant && product.variants?.length) {
+    const matchedVariant = product.variants.find((v) => {
+      if (selectedVariant.sku && v.sku && v.sku === selectedVariant.sku) return true;
+      if (selectedVariant.name && v.name && v.name === selectedVariant.name) return true;
+      if (selectedVariant.attributes && v.attributes) {
+        const vKeys = Object.keys(v.attributes);
+        const sKeys = Object.keys(selectedVariant.attributes);
+        if (vKeys.length === sKeys.length && vKeys.every((k) => String(v.attributes[k]) === String(selectedVariant.attributes[k]))) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (matchedVariant) {
+      if (!matchedVariant.isActive) throw new ErrorResponse('Selected variant is unavailable', 400);
+      maxStock = matchedVariant.stock;
+      if (matchedVariant.price > 0) itemPrice = matchedVariant.price;
+      variantData = {
+        sku: matchedVariant.sku || '',
+        name: matchedVariant.name || selectedVariant.name || '',
+        attributes: matchedVariant.attributes || selectedVariant.attributes || {},
+        price: itemPrice,
+        image: matchedVariant.image?.url || '',
+      };
+    } else if (selectedVariant) {
+      variantData = {
+        sku: selectedVariant.sku || '',
+        name: selectedVariant.name || '',
+        attributes: selectedVariant.attributes || {},
+        price: selectedVariant.price || itemPrice,
+        image: selectedVariant.image || '',
+      };
+      if (selectedVariant.price > 0) itemPrice = Number(selectedVariant.price);
+    }
+  } else if (selectedVariant) {
+    variantData = {
+      sku: selectedVariant.sku || '',
+      name: selectedVariant.name || '',
+      attributes: selectedVariant.attributes || {},
+      price: selectedVariant.price || itemPrice,
+      image: selectedVariant.image || '',
+    };
+    if (selectedVariant.price > 0) itemPrice = Number(selectedVariant.price);
+  }
+
+  if (maxStock < qty) throw new ErrorResponse('Insufficient stock', 400);
 
   let cart = await getCart(userId, sessionId);
-  const price = product.discountPrice > 0 ? product.discountPrice : product.price;
+
+  const isSameItem = (item) => {
+    const pId = (item.product._id || item.product).toString();
+    if (pId !== productId) return false;
+    const v1Name = item.selectedVariant?.name || '';
+    const v2Name = variantData?.name || '';
+    const v1Sku = item.selectedVariant?.sku || '';
+    const v2Sku = variantData?.sku || '';
+    if (v1Sku && v2Sku) return v1Sku === v2Sku;
+    return v1Name === v2Name;
+  };
 
   if (cart) {
-    const existingItem = cart.items.find(
-      (i) => (i.product._id || i.product).toString() === productId
-    );
+    const existingItem = cart.items.find(isSameItem);
     if (existingItem) {
-      existingItem.quantity = Math.min(existingItem.quantity + qty, product.stock);
+      existingItem.quantity = Math.min(existingItem.quantity + qty, maxStock);
     } else {
-      cart.items.push({ product: productId, quantity: qty, price });
+      cart.items.push({
+        product: productId,
+        quantity: qty,
+        price: itemPrice,
+        selectedVariant: variantData || undefined,
+      });
     }
     await cart.save();
     return cart.populate('items.product');
   }
 
-  const data = { items: [{ product: productId, quantity: qty, price }] };
+  const data = {
+    items: [
+      {
+        product: productId,
+        quantity: qty,
+        price: itemPrice,
+        selectedVariant: variantData || undefined,
+      },
+    ],
+  };
   if (userId) {
     data.user = userId;
     return cartRepo.upsertForUser(userId, data);
@@ -40,16 +113,24 @@ export const addToCart = async (userId, sessionId, productId, quantity) => {
   return cartRepo.upsertForSession(sessionId, data);
 };
 
-export const updateCartItem = async (userId, sessionId, productId, quantity) => {
+export const updateCartItem = async (userId, sessionId, productId, quantity, itemId = null, variantName = null) => {
   const cart = await getCart(userId, sessionId);
   if (!cart) throw new ErrorResponse('Cart not found', 404);
 
-  const item = cart.items.find((i) => (i.product._id || i.product).toString() === productId);
+  const item = cart.items.find((i) => {
+    if (itemId && i._id && i._id.toString() === itemId.toString()) return true;
+    const pId = (i.product._id || i.product).toString();
+    if (pId !== productId) return false;
+    if (variantName !== null && variantName !== undefined) {
+      return (i.selectedVariant?.name || '') === variantName;
+    }
+    return true;
+  });
   if (!item) throw new ErrorResponse('Item not in cart', 404);
 
   const qty = Number(quantity);
   if (qty <= 0) {
-    cart.items = cart.items.filter((i) => (i.product._id || i.product).toString() !== productId);
+    cart.items = cart.items.filter((i) => i !== item);
   } else {
     item.quantity = qty;
   }
@@ -58,10 +139,20 @@ export const updateCartItem = async (userId, sessionId, productId, quantity) => 
   return cart.populate('items.product');
 };
 
-export const removeFromCart = async (userId, sessionId, productId) => {
+export const removeFromCart = async (userId, sessionId, productId, itemId = null, variantName = null) => {
   const cart = await getCart(userId, sessionId);
   if (!cart) throw new ErrorResponse('Cart not found', 404);
-  cart.items = cart.items.filter((i) => (i.product._id || i.product).toString() !== productId);
+  cart.items = cart.items.filter((i) => {
+    if (itemId && i._id && i._id.toString() === itemId.toString()) return false;
+    const pId = (i.product._id || i.product).toString();
+    if (pId === productId) {
+      if (variantName !== null && variantName !== undefined) {
+        return (i.selectedVariant?.name || '') !== variantName;
+      }
+      return false;
+    }
+    return true;
+  });
   await cart.save();
   return cart.populate('items.product');
 };

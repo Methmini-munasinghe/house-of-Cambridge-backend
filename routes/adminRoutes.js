@@ -75,8 +75,8 @@ router.put(
 );
 
 router.get('/products', ...admin, ctrl.getAdminProducts);
-router.post('/products', ...admin, upload.array('images', 10), ctrl.createProduct);
-router.put('/products/:id', ...admin, mongoId('id'), validate, upload.array('images', 10), ctrl.updateProduct);
+router.post('/products', ...admin, upload.any(), ctrl.createProduct);
+router.put('/products/:id', ...admin, upload.any(), mongoId('id'), validate, ctrl.updateProduct);
 router.patch(
   '/products/:id/flash-sale',
   ...admin,

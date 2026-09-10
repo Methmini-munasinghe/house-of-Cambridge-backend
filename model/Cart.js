@@ -4,6 +4,13 @@ const cartItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   quantity: { type: Number, required: true, min: 1, max: 100, default: 1 },
   price: { type: Number, required: true, min: 0 },
+  selectedVariant: {
+    sku: { type: String, default: '' },
+    name: { type: String, default: '' },
+    attributes: { type: mongoose.Schema.Types.Mixed, default: {} },
+    price: { type: Number, default: 0 },
+    image: { type: String, default: '' },
+  },
 });
 
 const cartSchema = new mongoose.Schema(

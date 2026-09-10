@@ -14,10 +14,27 @@ router.route('/')
   .post(
     body('invoiceType').isIn(['online', 'manual']).withMessage('Invoice type must be online or manual'),
     body('clientDetails.clientName').trim().notEmpty().withMessage('Client name is required').escape(),
-    body('clientDetails.email').optional().isEmail().withMessage('Invalid email format').normalizeEmail(),
+    body('clientDetails.email').optional({ nullable: true, checkFalsy: true }).isEmail().withMessage('Invalid email format').normalizeEmail(),
     body('items').isArray({ min: 1 }).withMessage('Invoice must contain at least one item'),
-    body('items.*.productId').isMongoId().withMessage('Valid Product ID is required for each line item'),
-    body('items.*.quantity').isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
+    body('items.*.productId')
+      .optional({ nullable: true, checkFalsy: true })
+      .isMongoId()
+      .withMessage('Valid Product ID is required when productId is provided'),
+    body('items.*.name')
+      .optional({ nullable: true, checkFalsy: true })
+      .trim()
+      .isLength({ max: 300 })
+      .withMessage('Item name must not exceed 300 characters'),
+    body('items.*.unitPrice')
+      .optional({ nullable: true, checkFalsy: true })
+      .isFloat({ min: 0 })
+      .withMessage('Unit price must be a non-negative number'),
+    body('items.*.quantity')
+      .notEmpty()
+      .withMessage('Quantity is required')
+      .isFloat({ min: 1 })
+      .withMessage('Quantity must be at least 1')
+      .toFloat(),
     validate,
     ctrl.createInvoice
   );

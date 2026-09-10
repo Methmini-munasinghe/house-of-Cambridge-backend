@@ -137,13 +137,96 @@ export const getProductById = async (id) => {
   return { ...product.toObject(), reviews };
 };
 
+const processVariantsAndImages = async (data, files) => {
+  if (typeof data.variantAttributes === 'string' && data.variantAttributes.trim()) {
+    try {
+      data.variantAttributes = JSON.parse(data.variantAttributes);
+    } catch {
+      data.variantAttributes = [];
+    }
+  }
+
+  let variants = [];
+  if (Array.isArray(data.variants)) {
+    variants = data.variants;
+  } else if (typeof data.variants === 'string' && data.variants.trim()) {
+    try {
+      variants = JSON.parse(data.variants);
+    } catch {
+      variants = [];
+    }
+  }
+
+  if (Array.isArray(variants) && variants.length > 0) {
+    const variantImageMap = new Map();
+    for (const f of files) {
+      if (f.fieldname && f.fieldname.startsWith('variant_image_')) {
+        const idx = parseInt(f.fieldname.replace('variant_image_', ''), 10);
+        if (!Number.isNaN(idx)) {
+          variantImageMap.set(idx, f);
+        }
+      }
+    }
+
+    data.variants = await Promise.all(
+      variants.map(async (v, idx) => {
+        const fileForVariant = variantImageMap.get(idx);
+        let image = v.image || { public_id: '', url: '' };
+
+        if (fileForVariant) {
+          const res = await uploadBuffer(fileForVariant.buffer, 'products');
+          if (res?.public_id && res?.secure_url) {
+            image = { public_id: res.public_id, url: res.secure_url };
+          }
+        }
+
+        return {
+          sku: v.sku ? String(v.sku).trim() : '',
+          name: v.name ? String(v.name).trim() : '',
+          attributes: typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : {},
+          price: Number(v.price) >= 0 ? Number(v.price) : 0,
+          comparePrice: Number(v.comparePrice) >= 0 ? Number(v.comparePrice) : 0,
+          stock: Number(v.stock) >= 0 ? Math.floor(Number(v.stock)) : 0,
+          image,
+          isActive: v.isActive !== false,
+        };
+      })
+    );
+  }
+};
+
+const sanitizeProductData = (data) => {
+  coerceBooleans(data);
+  coerceNumbers(data);
+
+  if (data.brand === '' || data.brand === 'null' || data.brand === 'undefined' || !data.brand) {
+    data.brand = null;
+  } else if (typeof data.brand === 'object' && data.brand?._id) {
+    data.brand = data.brand._id;
+  }
+
+  if (typeof data.category === 'object' && data.category?._id) {
+    data.category = data.category._id;
+  }
+
+  if (!data.sku || (typeof data.sku === 'string' && data.sku.trim() === '')) {
+    data.sku = null;
+  }
+
+  if (typeof data.usageInstructions === 'string') {
+    data.usageInstructions = [data.usageInstructions];
+  }
+  if (Array.isArray(data.usageInstructions)) {
+    data.usageInstructions = data.usageInstructions.filter(Boolean);
+  }
+};
+
 export const createProduct = async (data, files = []) => {
   if (!data.productCode) {
     data.productCode = await generateProductCode();
   }
 
-  coerceBooleans(data);
-  coerceNumbers(data);
+  sanitizeProductData(data);
 
   if (data.name && typeof data.name !== 'string') {
     throw new ErrorResponse('Product name must be a string', 400);
@@ -156,11 +239,16 @@ export const createProduct = async (data, files = []) => {
     data.slug = await resolveSlug(generateSlug(data.name));
   }
 
-  data.images = files.length ? await uploadImages(files, 'products') : [];
+  await processVariantsAndImages(data, files);
+
+  const mainFiles = files.filter(
+    (f) => f.fieldname === 'images' || (!f.fieldname?.startsWith('variant_image_'))
+  );
+  data.images = mainFiles.length ? await uploadImages(mainFiles, 'products') : [];
 
   const product = await productRepo.create(data);
   return product.populate([
-    { path: 'category', select: 'name slug' },
+    { path: 'category', select: 'name slug variantAttributes' },
     { path: 'brand', select: 'name' }
   ]);
 };
@@ -171,11 +259,16 @@ export const updateProduct = async (id, data, files = []) => {
   const product = await productRepo.findById(id);
   if (!product) throw new ErrorResponse('Product not found', 404);
 
-  coerceBooleans(data);
-  coerceNumbers(data);
+  sanitizeProductData(data);
 
-  if (files.length) {
-    const newImages = await uploadImages(files, 'products');
+  const safeFiles = Array.isArray(files) ? files : [];
+  await processVariantsAndImages(data, safeFiles);
+
+  const mainFiles = safeFiles.filter(
+    (f) => f.fieldname === 'images' || (!f.fieldname?.startsWith('variant_image_'))
+  );
+  if (mainFiles.length) {
+    const newImages = await uploadImages(mainFiles, 'products');
     await deleteImages(product.images);
     data.images = newImages;
   }
@@ -187,13 +280,13 @@ export const updateProduct = async (id, data, files = []) => {
     data.slug = await resolveSlug(data.slug, id);
   }
 
-  const updatedProduct = await productRepo.update(id, data);
+  const updatedProduct = await Product.findByIdAndUpdate(id, data, {
+    returnDocument: 'after',
+    runValidators: true,
+  });
   if (!updatedProduct) throw new ErrorResponse('Product not found', 404);
 
-  return updatedProduct.populate([
-    { path: 'category', select: 'name slug' },
-    { path: 'brand', select: 'name' }
-  ]);
+  return updatedProduct;
 };
 
 export const deleteProduct = async (id) => {
@@ -214,7 +307,10 @@ export const deleteProduct = async (id) => {
     );
   }
 
-  await deleteImages(product.images);
+  const variantImages = (product.variants || [])
+    .map((v) => v.image)
+    .filter((img) => img?.public_id);
+  await deleteImages([...product.images, ...variantImages]);
   await productRepo.remove(id);
 };
 

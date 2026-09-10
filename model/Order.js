@@ -6,6 +6,12 @@ const orderItemSchema = new mongoose.Schema({
   image: { type: String, default: '' },
   price: { type: Number, required: true, min: 0 },
   quantity: { type: Number, required: true, min: 1 },
+  selectedVariant: {
+    sku: { type: String, default: '' },
+    name: { type: String, default: '' },
+    attributes: { type: mongoose.Schema.Types.Mixed, default: {} },
+    price: { type: Number, default: 0 },
+  },
   isReviewed: { type: Boolean, default: false },
 });
 
@@ -73,6 +79,7 @@ const orderSchema = new mongoose.Schema(
     coupon:              { type: String, default: '' },
     loyaltyPointsUsed:   { type: Number, default: 0, min: 0 },
     loyaltyPointsEarned: { type: Number, default: 0, min: 0 },
+    loyaltyPointsAwarded: { type: Boolean, default: false },
 
     trackingNumber: { type: String, default: '' },
     deliveredAt:    Date,
